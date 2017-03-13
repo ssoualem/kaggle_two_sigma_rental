@@ -1,0 +1,16 @@
+---
+title: "Cross-validation for learning curves framework"
+author: "Samy Soualem"
+date: "March 13, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## TODO when basic model with CV framework OK to see what to do next
+```{r}
+
+```
+

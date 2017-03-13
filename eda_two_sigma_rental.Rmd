@@ -1,0 +1,337 @@
+---
+title: "EDA Two Sigma Rental"
+author: "Samy Soualem"
+date: "March 12, 2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+# Load packages and data
+```{r}
+library(jsonlite)
+library(purrr)
+library(dplyr)
+library(ggplot2)
+library(caret)
+library(lubridate)
+library(Amelia)
+
+
+# Load JSON code taken from :
+# https://www.kaggle.com/danjordan/two-sigma-connect-rental-listing-inquiries/how-to-correctly-load-data-into-r
+
+data_dir <- "data"
+raw_data <- fromJSON(file.path(data_dir, "train.json"))
+                     
+# unlist every variable except `photos` and `features` and convert to tibble
+vars <- setdiff(names(raw_data), c("photos", "features"))
+raw_data <- map_at(raw_data, vars, unlist) %>% tibble::as_tibble(.)
+
+head(raw_data, n=1)
+
+str(raw_data)
+
+```
+
+
+# Basic features creation
+```{r}
+# Convert to datetime
+raw_data$created <- strftime(raw_data$created, tz = "EST", "%Y-%m-%d %H:%M:%S")
+
+# factor
+# TODO : see if ordered factor changes something
+raw_data$interest_level <- ordered(raw_data$interest_level, levels = c("low", "medium", "high"))
+
+raw_data$nb_features <- sapply(raw_data$features, length)
+raw_data$nb_photos <- sapply(raw_data$photos, length)
+raw_data$created_mday <- factor(mday(raw_data$created))
+raw_data$created_wday <- factor(wday(raw_data$created)
+                                , levels = c(1:7)
+                                , labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))
+raw_data$created_dt <- as.Date(raw_data$created)
+raw_data$created_month <- factor(month(raw_data$created))
+raw_data$created_hour <- factor(hour(raw_data$created))
+raw_data$description_nchar <- nchar(raw_data$description)
+
+# Price variants
+raw_data$log_price <- log(raw_data$price)
+raw_data$log_price_per_bedroom_p1 <- log(raw_data$price / (1 + raw_data$bedrooms))
+raw_data$log_price_per_bathroom_p1 <- log(raw_data$price / (1 + raw_data$bathrooms))
+raw_data$log_price_per_room_p2 <- log(raw_data$price / (2 + raw_data$bedrooms + raw_data$bathrooms))
+
+raw_data$logp1_nb_features <- log(1 + raw_data$nb_features)
+raw_data$logp1_nb_photos <- log(1 + raw_data$nb_photos)
+```
+
+
+
+
+## Check top and bottom of data
+```{r}
+head(raw_data, n = 3)
+
+# Use Rstudio's view option
+
+min(raw_data$created) # "2016-04-01 22:12:41 EST"
+max(raw_data$created) # "2016-06-29 21:41:47 EST"
+```
+
+## Check your "n"s
+```{r}
+# Plot # of listings by day
+raw_data %>%
+  #group_by(yday(created)) %>%
+  count(yday(created)) %>%
+  plot()
+```
+
+
+
+# Univariate analysis
+## Check missing values
+```{r}
+sapply(raw_data, function(x) sum(is.na(x)))
+sapply(raw_data, function(x) length(unique(x)))
+
+sapply(select(raw_data, contains("price")), function(x) sum(is.nan(x)))
+
+
+#missmap(raw_data, main = "Missing values vs observed")
+
+# No NA values
+```
+
+
+## Bathrooms
+```{r}
+count(raw_data, bathrooms)
+#table(raw_data$bathrooms, useNA = "always")
+
+raw_data %>%
+  group_by(bathrooms) %>%
+  summarise (n = n()) %>%
+  mutate(pct = n / sum(n) * 100)
+
+
+ggplot(data=raw_data, aes(x = bathrooms)) +
+  geom_bar(stat = "count")
+```
+
+
+## Bedrooms
+```{r}
+raw_data %>%
+  group_by(bedrooms) %>%
+  summarise (n = n()) %>%
+  mutate(pct = n / sum(n) * 100)
+
+ggplot(data=raw_data, aes(x = bedrooms)) +
+  geom_bar(stat = "count")
+```
+
+## Price
+```{r}
+ggplot(data=raw_data, aes(x = factor(0), y = price)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+summary(raw_data$price)
+# Some outliers with huge prices. Too high for rents (max = 4490000)
+
+
+# boxplot of log(price)
+ggplot(data=raw_data, aes(x = factor(0), y = log_price)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+```
+
+## Features
+### Number of features
+```{r}
+ggplot(data=raw_data, aes(x = factor(0), y = nb_features)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+
+raw_data %>%
+  group_by(nb_features) %>%
+  summarise (n = n()) %>%
+  mutate(pct = n / sum(n) * 100)
+
+ggplot(data=raw_data, aes(x = factor(0), y = logp1_nb_features)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+
+ggplot(data=raw_data, aes(x = nb_features)) +
+  geom_bar(stat = "bin")
+
+ggplot(data=raw_data, aes(x = logp1_nb_features)) +
+  geom_bar(stat = "bin")
+```
+
+## Description
+### Description length (nchar)
+```{r}
+ggplot(data=raw_data, aes(x = factor(0), y = description_nchar)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+ggplot(data=raw_data, aes(x = description_nchar)) +
+  geom_bar(stat = "bin")
+
+```
+
+
+## Photos
+### Number of photos
+```{r}
+ggplot(data=raw_data, aes(x = factor(0), y = nb_photos)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+ggplot(data=raw_data, aes(x = factor(0), y = logp1_nb_photos)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25) + # for whiskers
+  # To avoid displaying the dummy x variable
+  theme(axis.title.x=element_blank(),
+    axis.text.x=element_blank(),
+    axis.ticks.x=element_blank())
+
+ggplot(data=raw_data, aes(x = nb_photos)) +
+  geom_bar(stat = "bin")
+
+ggplot(data=raw_data, aes(x = logp1_nb_photos)) +
+  geom_bar(stat = "bin")
+```
+
+
+
+
+# Bivariate analysis
+## Creation date
+```{r}
+# By date
+ggplot(data=raw_data, aes(x = created_dt, fill = interest_level)) +
+  geom_bar(stat = "count")
+
+# By day of week
+ggplot(data=raw_data, aes(x = created_wday, fill = interest_level)) +
+  geom_bar(stat = "count")
+
+# By day of month
+ggplot(data=raw_data, aes(x = created_mday, fill = interest_level)) +
+  geom_bar(stat = "count")
+
+# By month
+ggplot(data=raw_data, aes(x = created_month, fill = interest_level)) +
+  geom_bar(stat = "count")
+
+# By hour
+ggplot(data=raw_data, aes(x = created_hour, fill = interest_level)) +
+  geom_bar(stat = "count")
+# Most creations at night : timezone problem
+
+
+```
+
+
+## Price and simple variants
+```{r}
+ggplot(data=raw_data, aes(x = interest_level, y = log_price)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+# Probably important
+
+ggplot(data=raw_data, aes(x = log_price)) +
+  geom_bar(stat = "bin")
+
+ggplot(data=raw_data, aes(x = interest_level, y = log_price_per_room_p2)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+
+ggplot(data=raw_data, aes(x = log_price_per_room_p2)) +
+  geom_bar(stat = "bin")
+  
+ggplot(data=raw_data, aes(x = interest_level, y = log_price_per_bedroom_p1)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+
+ggplot(data=raw_data, aes(x = log_price_per_bedroom_p1)) +
+  geom_bar(stat = "bin")
+
+ggplot(data=raw_data, aes(x = interest_level, y = log_price_per_bathroom_p1)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+
+ggplot(data=raw_data, aes(x = log_price_per_bathroom_p1)) +
+  geom_bar(stat = "bin")
+
+# All price variants probably useful
+
+
+```
+
+## Bathrooms
+```{r}
+ggplot(data=raw_data, aes(x = interest_level, y = bathrooms)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+# No clear signal
+```
+
+## Bedrooms
+```{r}
+ggplot(data=raw_data, aes(x = interest_level, y = bedrooms)) +
+  geom_boxplot() +
+  stat_boxplot(geom = "errorbar", width = 0.25)  # for whiskers
+# No clear signal
+```
+
+# Caret feature analysis (to learn about it mostly)
+```{r}
+plot_sample_size <- 1000
+plot_sample <- sample_n(raw_data, plot_sample_size, replace = FALSE)
+
+feat_plot <- select(plot_sample, log_price, nb_photos, nb_features, created_wday)
+featurePlot(x = feat_plot
+            , y =plot_sample$interest_level
+            , plot = "pairs"
+            , auto.key = list(columns = 3))
+
+featurePlot(x = feat_plot
+            , y =plot_sample$interest_level
+            , plot = "box"
+            , auto.key = list(columns = 3))
+
+
+```
