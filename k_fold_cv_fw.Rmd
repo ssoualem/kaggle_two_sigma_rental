@@ -13,15 +13,25 @@ knitr::opts_chunk$set(echo = TRUE)
 # Global parameters and ML libraries
 ```{r}
 # Don't use all data first to speed up development
+SAMPLE_TRAIN <- FALSE
 TRAIN_SIZE <- 5000
-K <- 3
-K_FOLD_REPEAT <- 1
 
+K <- 5
+K_FOLD_REPEAT <- 3
+
+library(dplyr)
+library(caret)
 library(randomForest)
 library(doMC)
-library(Metrics)
 
-registerDoMC(cores = 4)
+nb_cores <- detectCores(all.tests = FALSE, logical = TRUE)
+registerDoMC(cores = nb_cores)
+
+prof_dir <- "profiling"
+if(!dir.exists(prof_dir)) {
+  dir.create(prof_dir)
+}
+
 
 ```
 
@@ -40,8 +50,15 @@ registerDoMC(cores = 4)
 
 # Feature subset and pre-processing
 ```{r}
+if(SAMPLE_TRAIN) {
+  train_data <- sample_n(clean_data, TRAIN_SIZE)
+} else {
+  train_data <- clean_data
+}
+
+
 # Feature selection
-train_data <- sample_n(raw_data, TRAIN_SIZE) %>%
+train_data <- train_data %>%
   select(interest_level
          , bathrooms
          , bedrooms
@@ -87,6 +104,10 @@ set.seed(1234)
 # mtry around sqrt(# of predictors) for classification, around 1/3 of # of predictors for regression
 # => Start with 5 values evenly spaced between 2 and number of predictors
 # Start with 1k trees and increase if plateau not reached
+
+prof_fname <- file.path(prof_dir, "rf_fit_0")
+Rprof(filename = prof_fname, append = TRUE, memory.profiling = TRUE, gc.profiling = TRUE)
+
 rf_fit_0 <- train(interest_level ~ .
                   , data = train_data
                   , method = "parRF"
@@ -97,8 +118,26 @@ rf_fit_0 <- train(interest_level ~ .
                   , importance = TRUE
                   #, proximity = TRUE
                   , verbose = TRUE)
+Rprof(NULL)
+
+# 686s with t2.xlarge instance
 
 rf_fit_0
 
 ```
+
+# Temp prediction code
+```{r}
+# Load test set
+raw_test_data <- load_data(file.path(DATA_DIR, "test.json"))
+
+clean_test_data <- transform_raw_data(raw_test_data, "test")
+
+test_pred <- predict(rf_fit_0, newdata = clean_test_data, type = "prob")
+
+head(test_pred)
+
+write_submission(clean_test_data, test_pred, "rf_fit_0")
+```
+
 
