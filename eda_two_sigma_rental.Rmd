@@ -34,13 +34,11 @@ head(raw_data, n=1)
 
 #str(raw_data)
 
-```
-
-
-# Basic features creation (convert to function)
-```{r}
+# Feature creation / transformation
 clean_data <- transform_raw_data(raw_data)
+
 ```
+
 
 
 

@@ -9,8 +9,110 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## TODO when basic model with CV framework OK to see what to do next
+
+# Global parameters and ML libraries
+```{r}
+MODEL_NAME <- "rf_fit_0"
+
+# max nb of train + cv set observations
+#LEARN_CURVE_MAX_NB <- 300 # = train + cv set
+LEARN_CURVE_MAX_NB <- nrow(clean_data)
+LEARN_CURVE_STEP <- 2000
+
+LC_K <- 10
+LC_CV_REPEAT <- 3
+
+
+library(dplyr)
+library(tidyr)
+library(caret)
+library(randomForest)
+library(doMC)
+
+source("processing/fct_train.R")
+
+init_train()
+```
+
+## Plot learning curve
 ```{r}
 
+lc_data <- sample_n(clean_data, LEARN_CURVE_MAX_NB) %>% 
+  get_feature_subset()
+
+lc_train_idx <- createDataPartition(lc_data$interest_level, p = 0.8, list = FALSE)
+lc_train <- lc_data[lc_train_idx, ]
+lc_cv <- lc_data[-lc_train_idx, ]
+
+
+nb_iterations <- ceiling(nrow(lc_train) / LEARN_CURVE_STEP)
+
+
+# create empty data frame 
+learn_curve <- data.frame(m = integer(nb_iterations),
+                     train_error = numeric(nb_iterations),
+                     cv_error = numeric(nb_iterations))
+
+
+
+for(i in 1:nb_iterations) {
+  # min to avoid out of bounds for last iteration
+  current_m <- min(i*LEARN_CURVE_STEP, nrow(lc_train))
+  learn_curve[i, ]$m <- current_m
+  
+  
+  lc_fit <- train_rf_0(lc_train[1:current_m, ], LC_K, LC_CV_REPEAT, MODEL_NAME, save_model_rds = FALSE)
+  
+  learn_curve[i, ]$train_error <- min(lc_fit$results$logLoss)
+  
+  # Predict on cv data
+  cv_pred <- predict(lc_fit, newdata = lc_cv, type = "prob")
+  
+  # Convert outcome to probability format to compare with predictions
+  cv_actual_outcome <- data.frame(matrix(NA, ncol = 3, nrow = nrow(lc_cv)))
+  names(cv_actual_outcome) <- c("low", "medium", "high")
+  
+  cv_actual_outcome$low <- ifelse(lc_cv$interest_level == "low", 1, 0)
+  cv_actual_outcome$medium <- ifelse(lc_cv$interest_level == "medium", 1, 0)
+  cv_actual_outcome$high <- ifelse(lc_cv$interest_level == "high", 1, 0)
+    
+  
+  learn_curve[i, ]$cv_error <- MultiLogLoss(as.matrix(cv_actual_outcome), as.matrix(cv_pred))
+}
+
 ```
+
+## Plot learning curve
+```{r}
+
+
+train_tmp <- learn_curve %>%
+select(m, train_error) %>%
+rename(error = train_error)
+train_tmp$type <- "train"
+
+cv_tmp <- learn_curve %>%
+select(m, cv_error) %>%
+rename(error = cv_error)
+cv_tmp$type <- "cv"
+
+
+lc_plot_df <-rbind(train_tmp, cv_tmp)
+
+end_ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
+
+# Save to file
+saveRDS(lc_plot_df, file.path(MODEL_DIR, paste0(MODEL_NAME, "_lc_", end_ts, ".rds")))
+
+
+g <- ggplot(data = lc_plot_df, aes(x = m, color = type)) +
+  geom_line(aes(y = error)) +
+  geom_line(aes(y = error)) +
+  ggtitle("Learning curve - metric = log loss")
+
+ggsave(file.path(MODEL_LC_DIR, paste0(MODEL_NAME, "_lc_", end_ts, ".pdf")))
+
+```
+
+
 

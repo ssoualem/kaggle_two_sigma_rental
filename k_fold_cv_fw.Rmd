@@ -13,24 +13,23 @@ knitr::opts_chunk$set(echo = TRUE)
 # Global parameters and ML libraries
 ```{r}
 # Don't use all data first to speed up development
-SAMPLE_TRAIN <- FALSE
-TRAIN_SIZE <- 5000
+SAMPLE_TRAIN <- TRUE
+TRAIN_SIZE <- 50
 
-K <- 5
-K_FOLD_REPEAT <- 3
+K <- 10
+CV_REPEAT <- 3
+
 
 library(dplyr)
 library(caret)
 library(randomForest)
 library(doMC)
 
-nb_cores <- detectCores(all.tests = FALSE, logical = TRUE)
-registerDoMC(cores = nb_cores)
+source("processing/fct_train.R")
 
-prof_dir <- "profiling"
-if(!dir.exists(prof_dir)) {
-  dir.create(prof_dir)
-}
+
+
+init_train()
 
 
 ```
@@ -58,73 +57,17 @@ if(SAMPLE_TRAIN) {
 
 
 # Feature selection
-train_data <- train_data %>%
-  select(interest_level
-         , bathrooms
-         , bedrooms
-         , latitude
-         , longitude
-         #, price
-         , log_price
-         #, log_price_per_bedroom_p1
-         #, log_price_per_bathroom_p1
-         #, log_price_per_room_p2
-         , nb_features
-         #, logp1_nb_features
-         #, created_mday
-         , created_wday
-         #, created_hour
-         , nb_photos
-         #, logp1_nb_photos
-         )
-
-# Normalization parameters
-pre_process_ctrl <- preProcess(train_data, method = c("center", "scale"))
-
-# Convert factors to dummyvars (explicit conversion *apparently* not necessary with caret if variables are factors)
-# use fullRank = TRUE to code with an intercept
-#dummies <- dummyVars(interest_level ~ ., data = train_data)
-#train_data_dummy <- predict(dummies, newdata = train_data)
+train_data <- get_feature_subset(train_data)
 
 
+test_tmp_model <- train_rf_0(train_data, K, CV_REPEAT, "test_tmp")
 
+test_tmp_model$results$logLoss
 
+summary(test_tmp_model)
 ```
 
 
-## TODO
-```{r}
-fit_control <- trainControl(method = "repeatedcv", number = K, repeats = K_FOLD_REPEAT
-                            , classProbs = TRUE
-                            , summaryFunction = mnLogLoss
-                            )
-
-set.seed(1234)
-# best practices RF paremeters (from "applied predictive modeling")
-# mtry around sqrt(# of predictors) for classification, around 1/3 of # of predictors for regression
-# => Start with 5 values evenly spaced between 2 and number of predictors
-# Start with 1k trees and increase if plateau not reached
-
-prof_fname <- file.path(prof_dir, "rf_fit_0")
-Rprof(filename = prof_fname, append = TRUE, memory.profiling = TRUE, gc.profiling = TRUE)
-
-rf_fit_0 <- train(interest_level ~ .
-                  , data = train_data
-                  , method = "parRF"
-                  # , preProcess = pre_process_ctrl
-                  , trControl = fit_control
-                  #, mtry = TO TUNE
-                  #, ntree = 1000
-                  , importance = TRUE
-                  #, proximity = TRUE
-                  , verbose = TRUE)
-Rprof(NULL)
-
-# 686s with t2.xlarge instance
-
-rf_fit_0
-
-```
 
 # Temp prediction code
 ```{r}
