@@ -14,7 +14,7 @@ knitr::opts_chunk$set(echo = TRUE)
 ```{r}
 # Don't use all data first to speed up development
 SAMPLE_TRAIN <- FALSE
-TRAIN_SIZE <- 50
+TRAIN_SIZE <- 1000
 
 K <- 5
 CV_REPEAT <- 3
@@ -48,6 +48,7 @@ init_train()
 
 # Feature subset and pre-processing
 ```{r}
+set.seed(5461)
 if(SAMPLE_TRAIN) {
   train_data <- sample_n(clean_data, TRAIN_SIZE)
 } else {

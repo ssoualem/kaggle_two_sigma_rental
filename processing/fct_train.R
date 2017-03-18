@@ -70,35 +70,6 @@ shutdown_computer <- function() {
 }
 
 
-
-
-# TODO : useless function, replace with "select(df, one_of(features))"
-get_feature_subset <- function(data) {
-  out_data <- data %>%
-    select(interest_level
-           , bathrooms
-           , bedrooms
-           , latitude
-           , longitude
-           #, price
-           , log_price
-           , log_price_per_bedroom_p1
-           , log_price_per_bathroom_p1
-           #, log_price_per_room_p2
-           , nb_features
-           #, logp1_nb_features
-           #, created_mday    # may be useful but expensive to train
-           , created_wday
-           #, created_hour
-           , nb_photos
-           #, logp1_nb_photos
-           , description_nchar
-    )
-  
-  out_data
-}
-
-
 train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TRUE, profile = FALSE, send_notif = FALSE) {
   start_ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
@@ -133,6 +104,7 @@ train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TR
                     , method = "parRF"
                     # , preProcess = pre_process_ctrl
                     , trControl = fit_control
+                    #, tuneLength = 1  # reset to default when feature engineering "done"
                     #, mtry = TO TUNE
                     , ntree = 1000
                     , importance = TRUE

@@ -54,13 +54,14 @@ transform_raw_data <- function(x, type = "train") {
   ##########################################################################################
   # Date features
   ##########################################################################################
-  x$created_mday <- factor(mday(x$created))
-  x$created_wday <- factor(wday(x$created)
-                                  , levels = c(1:7)
-                                  , labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))
+  x$created_mday <- as.integer(factor(mday(x$created)))
+ # x$created_wday <- factor(wday(x$created)
+  #                                , levels = c(1:7)
+   #                               , labels = c("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"))
+  x$created_wday <- as.integer(factor(wday(x$created)))
   x$created_dt <- as.Date(x$created)
-  x$created_month <- factor(month(x$created))
-  x$created_hour <- factor(hour(x$created))
+  x$created_month <- as.integer(factor(month(x$created)))
+  x$created_hour <- as.integer(factor(hour(x$created)))
   
   ##########################################################################################
   # Description features
