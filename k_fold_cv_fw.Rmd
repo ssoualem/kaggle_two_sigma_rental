@@ -13,19 +13,18 @@ knitr::opts_chunk$set(echo = TRUE)
 # Global parameters and ML libraries
 ```{r}
 # Don't use all data first to speed up development
-SAMPLE_TRAIN <- TRUE
+SAMPLE_TRAIN <- FALSE
 TRAIN_SIZE <- 50
 
-K <- 10
+K <- 5
 CV_REPEAT <- 3
 
 
 library(dplyr)
 library(caret)
-library(randomForest)
-library(doMC)
 
 source("processing/fct_train.R")
+source("processing/fct_prediction.R")
 
 
 
@@ -57,15 +56,41 @@ if(SAMPLE_TRAIN) {
 
 
 # Feature selection
-train_data <- get_feature_subset(train_data)
+feat_target <- c(
+  "interest_level"
+ , "bathrooms"
+ , "bedrooms"
+ , "latitude"
+ , "longitude"
+ , "price"
+ , "nb_features"
+ , "created_mday"
+ , "created_wday"
+ , "created_hour"
+ , "nb_photos"
+ , "descr_n_words"
+ , "price_per_bed"
+ , "price_per_bath"
+ , "price_per_room"
+ , "bed_per_bath"
+ , "bed_bath_diff"
+ , "bed_bath_sum"
+ , "beds_perc"
+)
 
 
-test_tmp_model <- train_rf_0(train_data, K, CV_REPEAT, "test_tmp")
+  
+train_data <- select(train_data, one_of(feat_target))
 
-test_tmp_model$results$logLoss
+model_name <- "naive_feat_rf_1"
 
-summary(test_tmp_model)
+current_fit <- train_rf_0(train_data, K, CV_REPEAT, model_name, send_notif = TRUE)
+
+current_fit
+
+
 ```
+
 
 
 
@@ -76,11 +101,18 @@ raw_test_data <- load_data(file.path(DATA_DIR, "test.json"))
 
 clean_test_data <- transform_raw_data(raw_test_data, "test")
 
-test_pred <- predict(rf_fit_0, newdata = clean_test_data, type = "prob")
+test_pred <- predict(current_fit, newdata = clean_test_data, type = "prob")
 
-head(test_pred)
+#head(test_pred)
 
-write_submission(clean_test_data, test_pred, "rf_fit_0")
+write_submission(clean_test_data, test_pred, model_name)
+```
+
+
+# Shutdown instance when done
+```{r}
+shutdown_computer()
+
 ```
 
 

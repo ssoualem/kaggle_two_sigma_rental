@@ -2,8 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
-
 data/
 log/
 models/
 profiling/
+param/
+.httr-oauth

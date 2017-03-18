@@ -1,7 +1,18 @@
+library(dplyr)
+library(tidyr)
+library(caret)
+library(randomForest)
+library(doMC)
+library(twitteR)
+
+
 MODEL_DIR <- "models"
 MODEL_LC_DIR <- file.path(MODEL_DIR,"learning_curve") 
 LOG_DIR <- "log"
 PROF_DIR <- "profiling"
+PARAM_DIR <- "param"
+
+TW_USER <- "Tenolios"
 
 init_train <- function() {
   if(!dir.exists(PROF_DIR)) {
@@ -20,12 +31,48 @@ init_train <- function() {
     dir.create(LOG_DIR)
   }
   
+  if(!dir.exists(PARAM_DIR)) {
+    dir.create(PARAM_DIR)
+  }
+  
   nb_cores <- detectCores(all.tests = FALSE, logical = TRUE)
   registerDoMC(cores = nb_cores)
 }
 
 
-# TODO : add para for feature selection
+# Twitter API auth
+tw_auth <- function() {
+  #write.csv2(twitter_api_param, file.path(PARAM_DIR, "twitter_api_param.csv"), row.names = FALSE)
+  
+  tw_auth_param <- read.csv2(file.path(PARAM_DIR, "twitter_api_param.csv"), stringsAsFactors = FALSE)
+  setup_twitter_oauth(tw_auth_param$api_key,tw_auth_param$api_secret
+                      , tw_auth_param$access_token, tw_auth_param$access_token_secret )
+}
+
+tw_send <- function(txt) {
+  # Auth everytime just in case
+  tw_auth()
+  dmSend(txt, TW_USER)
+}
+
+tw_send_cv <- function(fit, model_name = "") {
+  msg <- paste("Model :", model_name," - Min local CV :", min(fit$results$logLoss))
+  tw_send(msg)
+}
+
+# Used to stop the instance after training a model
+shutdown_computer <- function() {
+  # user needs to be in the sudoers file like this
+  # username ALL = NOPASSWD: /sbin/shutdown
+  # use "sudo visudo" to edit file
+  tw_send("Shutting down instance")
+  system('sudo shutdown -h now', wait = FALSE)
+}
+
+
+
+
+# TODO : useless function, replace with "select(df, one_of(features))"
 get_feature_subset <- function(data) {
   out_data <- data %>%
     select(interest_level
@@ -35,12 +82,12 @@ get_feature_subset <- function(data) {
            , longitude
            #, price
            , log_price
-           #, log_price_per_bedroom_p1
-           #, log_price_per_bathroom_p1
+           , log_price_per_bedroom_p1
+           , log_price_per_bathroom_p1
            #, log_price_per_room_p2
            , nb_features
            #, logp1_nb_features
-           #, created_mday
+           #, created_mday    # may be useful but expensive to train
            , created_wday
            #, created_hour
            , nb_photos
@@ -52,7 +99,7 @@ get_feature_subset <- function(data) {
 }
 
 
-train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TRUE, profile = FALSE) {
+train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TRUE, profile = FALSE, send_notif = FALSE) {
   start_ts <- format(Sys.time(), "%Y%m%d_%H%M%S")
   
   log_file = file.path(LOG_DIR, paste0("train_model_", model_name, "_"
@@ -66,7 +113,7 @@ train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TR
                               , classProbs = TRUE
                               , summaryFunction = mnLogLoss)
   
-  set.seed(1234)
+  
   # best practices RF paremeters (from "applied predictive modeling")
   # mtry around sqrt(# of predictors) for classification, around 1/3 of # of predictors for regression
   # => Start with 5 values evenly spaced between 2 and number of predictors
@@ -77,31 +124,37 @@ train_rf_0 <- function(train_data, k, cv_repeat, model_name, save_model_rds = TR
     Rprof(filename = prof_fname, append = FALSE, memory.profiling = FALSE, gc.profiling = FALSE)
   }
   
-  log_msg <- paste("Training start for model", model_name, ":", Sys.time())
+  log_msg <- paste("Training start for model", model_name, ":", Sys.time(),"\n")
   cat(log_msg, file = log_file, append = TRUE)
+  
+  set.seed(1234)
   rf_fit_0 <- train(interest_level ~ .
                     , data = train_data
                     , method = "parRF"
                     # , preProcess = pre_process_ctrl
                     , trControl = fit_control
                     #, mtry = TO TUNE
-                    #, ntree = 1000
+                    , ntree = 1000
                     , importance = TRUE
                     #, proximity = TRUE
                     , verbose = TRUE)
   if(profile) {
     Rprof(NULL)
   }
-  log_msg <- paste("Training end for model", model_name, ":", Sys.time())
+  log_msg <- paste0(print(rf_fit_0), "\n")
   cat(log_msg, file = log_file, append = TRUE)
   
-  # 686s with t2.xlarge instance
-  
-  #rf_fit_0
+  log_msg <- paste("Training end for model", model_name, ":", Sys.time(),"\n")
+  cat(log_msg, file = log_file, append = TRUE)
   
   # Save to file
   if(save_model_rds) {
     saveRDS(rf_fit_0, file.path(MODEL_DIR, paste0(model_name, "_", start_ts, ".rds")))
+  }
+  
+  # Send local CV score via Twitter (mail problem on AWS instance)
+  if(send_notif) {
+    tw_send_cv(rf_fit_0, model_name)
   }
   
   rf_fit_0

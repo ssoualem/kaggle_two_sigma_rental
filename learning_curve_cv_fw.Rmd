@@ -12,22 +12,21 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Global parameters and ML libraries
 ```{r}
-MODEL_NAME <- "rf_fit_0"
+MODEL_NAME <- "test"
 
 # max nb of train + cv set observations
-#LEARN_CURVE_MAX_NB <- 300 # = train + cv set
-LEARN_CURVE_MAX_NB <- nrow(clean_data)
-LEARN_CURVE_STEP <- 2000
+#LEARN_CURVE_MAX_NB <- nrow(clean_data)
+LEARN_CURVE_MAX_NB <- 300 # = train + cv set
 
-LC_K <- 10
+LEARN_CURVE_STEP <- 100
+
+LC_K <- 5
 LC_CV_REPEAT <- 3
 
 
 library(dplyr)
 library(tidyr)
 library(caret)
-library(randomForest)
-library(doMC)
 
 source("processing/fct_train.R")
 
@@ -115,4 +114,8 @@ ggsave(file.path(MODEL_LC_DIR, paste0(MODEL_NAME, "_lc_", end_ts, ".pdf")))
 ```
 
 
+# Shutdown instance when done
+```{r}
+#shutdown_computer()
 
+```
