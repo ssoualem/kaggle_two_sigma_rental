@@ -36,7 +36,7 @@ init_train <- function() {
   }
   
   nb_cores <- detectCores(all.tests = FALSE, logical = TRUE)
-  registerDoMC(cores = nb_cores)
+  registerDoMC(cores = floor(nb_cores / 2))
 }
 
 

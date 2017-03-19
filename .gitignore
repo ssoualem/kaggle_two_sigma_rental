@@ -8,3 +8,4 @@ models/
 profiling/
 param/
 .httr-oauth
+submissions/submissions_to_merge

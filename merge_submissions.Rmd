@@ -1,0 +1,86 @@
+---
+title: "Merge submissions"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Merge submissions
+
+```{r}
+SUBM_TO_MERGE_DIR <- "submissions/submissions_to_merge"
+
+subm1_fname <- file.path(SUBM_TO_MERGE_DIR, "submission_it_is_lit_20170319.csv")
+subm2_fname <- file.path(SUBM_TO_MERGE_DIR, "submission_it_is_lit_python_20170319.csv")
+subm3_fname <- file.path(SUBM_TO_MERGE_DIR, "submission_h2o_20170319.csv")
+
+subm_merged_fname <- file.path(SUBM_TO_MERGE_DIR, paste("submission_merged_", format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv", sep=""))
+subm_geom_mean_fname <- file.path(SUBM_TO_MERGE_DIR, paste("submission_geom_mean_"
+                                                               , format(Sys.time(), "%Y%m%d_%H%M%S"), ".csv", sep=""))
+
+
+subm1 <- read.csv(subm1_fname)
+subm2 <- read.csv(subm2_fname)
+subm3 <- read.csv(subm3_fname)
+
+
+
+subm_merged <- bind_rows(subm1, subm2, subm3)
+
+subm_merged <- group_by(subm_merged, listing_id) %>%
+  summarise(low = mean(low)
+         , medium = mean(medium)
+         , high = mean(high))
+
+nrow(subm3)
+nrow(subm_merged)
+
+head(subm1, 1)
+head(subm2, 1)
+head(subm3, 1)
+
+
+filter(subm_merged, listing_id == 7142618)
+
+write.csv(subm_merged, file = subm_merged_fname, row.names = FALSE, quote = FALSE)
+
+```
+
+
+## Geometric mean
+```{r}
+gm_mean = function(x, na.rm=TRUE){
+  exp(sum(log(x[x > 0]), na.rm=na.rm) / length(x))
+}
+
+
+
+subm_geom_mean <- bind_rows(subm1, subm2, subm3)
+
+subm_geom_mean <- group_by(subm_merged, listing_id) %>%
+  summarise(low = gm_mean(low)
+         , medium = gm_mean(medium)
+         , high = gm_mean(high))
+
+nrow(subm3)
+nrow(subm_geom_mean)
+
+head(subm1, 1)
+head(subm2, 1)
+head(subm3, 1)
+filter(subm_geom_mean, listing_id == 7142618)
+
+
+write.csv(subm_geom_mean, file = subm_geom_mean_fname, row.names = FALSE, quote = FALSE)
+```
+
+## Weighted mean
+```{r}
+cor(subm1, subm2) # low corr
+cor(subm1, subm3) # strong corr
+cor(subm2, subm3) # low corr
+
+```
+

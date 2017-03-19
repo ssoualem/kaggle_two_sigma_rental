@@ -1,5 +1,6 @@
 library(stringr)
 library(quanteda)
+library(lubridate)
 
 # TODO : basic doc (in/out)
 
